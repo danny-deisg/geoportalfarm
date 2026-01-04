@@ -1,17 +1,14 @@
 /* ================== CONFIG ================== */
-// ✅ Puedes dejar tus credenciales tal cual como en tu versión anterior.
-// (Recomendación práctica: mover a variables de entorno cuando lo publiques)
 const SUPABASE_URL = "https://awelnlgtikfmbfweypxy.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3ZWxubGd0aWtmbWJmd2V5cHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMzAwNTIsImV4cCI6MjA4MjYwNjA1Mn0.jLLzb2CzoRWTwt7xJxQAD834eeR5jtQpcgeQV4saGhg";
-
 const ZOOM_BARRIOS_LABELS = 13;
 
 /* ================== DOM ================== */
 const sidebar = document.getElementById("sidebar");
 const btnToggleSidebar = document.getElementById("btnToggleSidebar");
 const btnHome = document.getElementById("btnHome");
-
 const footerText = document.getElementById("footerText");
+
 const statusEl = document.getElementById("status");
 const layersEl = document.getElementById("layers");
 
@@ -39,10 +36,16 @@ const distInfo = document.getElementById("distInfo");
 const btnLoadLayers = document.getElementById("btnLoadLayers");
 const btnClear = document.getElementById("btnClear");
 
+/* ✅ Stats DOM */
+const btnRefreshStats = document.getElementById("btnRefreshStats");
+const statPendiente = document.getElementById("statPendiente");
+const statProceso = document.getElementById("statProceso");
+const statAtendido = document.getElementById("statAtendido");
+const statCerrado = document.getElementById("statCerrado");
+const statsHint = document.getElementById("statsHint");
+
 /* ================== HELPERS ================== */
-function setFooter(msg) {
-  footerText.textContent = msg || "Listo";
-}
+function setFooter(msg) { footerText.textContent = msg || "Listo"; }
 function setStatus(msg, cls = "") {
   statusEl.className = `status ${cls}`.trim();
   statusEl.textContent = msg || "";
@@ -57,52 +60,49 @@ function escapeHtml(s) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 }
+function normalizeEstado(s) {
+  const x = String(s || "pendiente").trim().toLowerCase();
+  if (x.includes("proceso")) return "en proceso";
+  if (x.includes("atendido")) return "atendido";
+  if (x.includes("cerrado")) return "cerrado";
+  return "pendiente";
+}
 
 /* ================== MAP ================== */
 const map = L.map("map", { zoomControl: true }).setView([0, 0], 2);
-
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 20,
   attribution: "&copy; OpenStreetMap",
 }).addTo(map);
 
-const loadedLayers = new Map(); // tableName -> L.GeoJSON
+const loadedLayers = new Map();
 let barrioHighlight = null;
 
-/* Barrios labels / interaction */
 let barriosInteraction = null;
 let barriosInteractionLabelsEnabled = false;
 const barrioLabelLayers = [];
 
-/* Distances */
 let clickMarker = null;
 let distLinesLayer = null;
 let distTargetsLayer = null;
 
-/* Report pick */
 let reportPickMarker = null;
 let reportPickActive = false;
 
 /* ================== STYLES ================== */
 const LAYER_COLORS = {
-  alcantarillado: { line: "#ef4444" }, // rojo
-  agua_potable: { line: "#2563eb" }, // azul
-  bomberos_wgs84: { point: "#ef4444" }, // rojo
-  policia_wgs84: { point: "#2563eb" }, // azul
-  salud_wgs84: { point: "#facc15" }, // amarillo
+  alcantarillado: { line: "#ef4444" },
+  agua_potable: { line: "#2563eb" },
+  bomberos_wgs84: { point: "#ef4444" },
+  policia_wgs84: { point: "#2563eb" },
+  salud_wgs84: { point: "#facc15" },
 };
 
 function styleByLayer(tabla, geomType) {
   const t = (geomType || "").toLowerCase();
-  if (t.includes("polygon")) {
-    return { color: "#34d399", weight: 2, fillColor: "#10b981", fillOpacity: 0.20 };
-  }
-  if (t.includes("line")) {
-    const col = LAYER_COLORS[tabla]?.line || "#22c55e";
-    return { color: col, weight: 3, opacity: 0.95 };
-  }
-  const col = LAYER_COLORS[tabla]?.point || "#f97316";
-  return { radius: 7, fillColor: col, color: "#ffffff", weight: 1, fillOpacity: 0.95 };
+  if (t.includes("polygon")) return { color: "#34d399", weight: 2, fillColor: "#10b981", fillOpacity: 0.20 };
+  if (t.includes("line")) return { color: LAYER_COLORS[tabla]?.line || "#22c55e", weight: 3, opacity: 0.95 };
+  return { radius: 7, fillColor: LAYER_COLORS[tabla]?.point || "#f97316", color: "#ffffff", weight: 1, fillOpacity: 0.95 };
 }
 
 function highlightStyle() {
@@ -110,40 +110,21 @@ function highlightStyle() {
 }
 
 function reporteIcon(estadoRaw) {
-  const estado = String(estadoRaw || "Pendiente").toLowerCase();
-
-  // Pendiente: círculo rojo
-  // En proceso: rombo amarillo
-  // Atendido: cuadrado verde
-  // Cerrado: triángulo azul
+  const estado = normalizeEstado(estadoRaw);
   let html = `<span class="repIcon repIcon--pendiente"></span>`;
-  if (estado.includes("proceso")) html = `<span class="repIcon repIcon--proceso"></span>`;
-  else if (estado.includes("atendido")) html = `<span class="repIcon repIcon--atendido"></span>`;
-  else if (estado.includes("cerrado")) html = `<span class="repIcon repIcon--cerrado"></span>`;
+  if (estado === "en proceso") html = `<span class="repIcon repIcon--proceso"></span>`;
+  else if (estado === "atendido") html = `<span class="repIcon repIcon--atendido"></span>`;
+  else if (estado === "cerrado") html = `<span class="repIcon repIcon--cerrado"></span>`;
 
-  return L.divIcon({
-    className: "",
-    html,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
-  });
+  return L.divIcon({ className: "", html, iconSize: [18, 18], iconAnchor: [9, 9] });
 }
 
 /* ================== POPUP ================== */
 function popupHTML(properties) {
   const props = properties || {};
   const keys = Object.keys(props).filter((k) => k !== "geom" && k !== "geometry");
-
-  const rows = keys
-    .map((k) => {
-      const v = props[k];
-      return `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v)}</td></tr>`;
-    })
-    .join("");
-
-  return `<div style="max-height:260px;overflow:auto;min-width:240px">
-    <table class="popTable">${rows}</table>
-  </div>`;
+  const rows = keys.map((k) => `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(props[k])}</td></tr>`).join("");
+  return `<div style="max-height:260px;overflow:auto;min-width:240px"><table class="popTable">${rows}</table></div>`;
 }
 
 /* ================== API ================== */
@@ -158,7 +139,6 @@ async function rpcPost(fnName, bodyObj) {
     },
     body: JSON.stringify(bodyObj),
   });
-
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
     throw new Error(`${fnName} HTTP ${r.status} ${txt ? "- " + txt.slice(0, 180) : ""}`);
@@ -178,7 +158,6 @@ async function insertReporte(payload) {
     },
     body: JSON.stringify(payload),
   });
-
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
     throw new Error(`INSERT reportes HTTP ${r.status} ${txt ? "- " + txt.slice(0, 220) : ""}`);
@@ -205,15 +184,56 @@ async function loadOpenApiTables() {
       Accept: "application/openapi+json",
     },
   });
-
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
     throw new Error(`OpenAPI HTTP ${r.status} ${txt ? "- " + txt.slice(0, 160) : ""}`);
   }
-
   const spec = await r.json();
   return extractTableNamesFromOpenAPI(spec);
 }
+
+/* ✅ Estadísticas de reportes (client-side, robusto) */
+async function loadReporteStats() {
+  statsHint.textContent = "Cargando…";
+  statPendiente.textContent = "—";
+  statProceso.textContent = "—";
+  statAtendido.textContent = "—";
+  statCerrado.textContent = "—";
+
+  try {
+    // traemos solo estado (y hasta 10k filas)
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/reportes?select=estado&limit=10000`, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Accept: "application/json",
+      },
+    });
+
+    if (!r.ok) {
+      const txt = await r.text().catch(() => "");
+      throw new Error(`Stats HTTP ${r.status} ${txt ? "- " + txt.slice(0, 160) : ""}`);
+    }
+
+    const rows = await r.json();
+    const c = { pendiente: 0, "en proceso": 0, atendido: 0, cerrado: 0 };
+
+    for (const row of rows) {
+      c[normalizeEstado(row.estado)]++;
+    }
+
+    statPendiente.textContent = c.pendiente;
+    statProceso.textContent = c["en proceso"];
+    statAtendido.textContent = c.atendido;
+    statCerrado.textContent = c.cerrado;
+
+    statsHint.textContent = `Total: ${rows.length}`;
+  } catch (e) {
+    statsHint.textContent = `No se pudo cargar: ${e.message}`;
+  }
+}
+
+btnRefreshStats?.addEventListener("click", loadReporteStats);
 
 /* ================== LAYERS ================== */
 async function addLayer(tabla) {
@@ -251,7 +271,6 @@ async function addLayer(tabla) {
   }).addTo(map);
 
   loadedLayers.set(tabla, layer);
-
   setFooter(`Cargada: ${tabla}`);
 }
 
@@ -299,10 +318,7 @@ btnToggleSidebar.addEventListener("click", () => {
 });
 
 btnHome.addEventListener("click", async () => {
-  // "zona de trabajo": reportes, si no, barrios
-  if (!zoomToLayerIfAny("reportes")) {
-    zoomToLayerIfAny("barrios");
-  }
+  if (!zoomToLayerIfAny("reportes")) zoomToLayerIfAny("barrios");
 });
 
 /* ================== Render layer list ================== */
@@ -326,12 +342,10 @@ async function renderLayerList() {
 
     const chip = document.createElement("span");
     chip.className = "chip";
-    chip.id = `chip_${t}`;
     chip.textContent = "—";
 
     chk.onchange = async (ev) => {
       const table = ev.target.dataset.table;
-
       try {
         if (ev.target.checked) await addLayer(table);
         else removeLayer(table);
@@ -339,13 +353,6 @@ async function renderLayerList() {
         if (table === "barrios") {
           barriosInteractionLabelsEnabled = ev.target.checked;
           updateBarrioLabelVisibility();
-        }
-
-        // Actualiza chip tipo geometry si aún es —
-        if (chip.textContent === "—" && loadedLayers.has(table)) {
-          const layer = loadedLayers.get(table);
-          // no confiable para tipo exacto, pero suficiente
-          chip.textContent = "OK";
         }
       } catch (e) {
         setStatus(`Error: ${e.message}`, "err");
@@ -362,7 +369,7 @@ async function renderLayerList() {
   setStatus(`Listo: ${tables.length} capas`, "ok");
 }
 
-/* ================== BARRIOS: search + info + highlight ================== */
+/* ================== BARRIOS ================== */
 let searchTimer = null;
 
 function showResults(items) {
@@ -394,12 +401,6 @@ async function cargarInfoBarrio(barrioName) {
 
   const info = await rpcPost("barrio_servicios", { barrio_name: barrioName });
 
-  if (info?.error) {
-    barrioInfo.style.display = "block";
-    barrioInfo.innerHTML = `<div class="status err">${escapeHtml(info.error)}</div>`;
-    return;
-  }
-
   barrioInfo.style.display = "block";
   barrioInfo.innerHTML = `
     <div class="kv"><div class="k">Barrio</div><div class="v">${escapeHtml(info.barrio)}</div></div>
@@ -408,17 +409,14 @@ async function cargarInfoBarrio(barrioName) {
     <div class="kv"><div class="k">Policía</div><div class="v">${escapeHtml(info.policia_count)}</div></div>
     <div class="kv"><div class="k">Salud</div><div class="v">${escapeHtml(info.salud_count)}</div></div>
   `;
+
   setFooter("Listo");
 }
 
 async function resaltarBarrio(barrioName) {
   const fc = await rpcPost("barrio_geom", { barrio_name: barrioName });
 
-  if (barrioHighlight) {
-    map.removeLayer(barrioHighlight);
-    barrioHighlight = null;
-  }
-
+  if (barrioHighlight) map.removeLayer(barrioHighlight);
   barrioHighlight = L.geoJSON(fc, { style: highlightStyle }).addTo(map);
   const b = barrioHighlight.getBounds();
   if (b && b.isValid()) map.fitBounds(b, { padding: [24, 24] });
@@ -427,11 +425,7 @@ async function resaltarBarrio(barrioName) {
 barrioInput.addEventListener("input", () => {
   const q = barrioInput.value.trim();
   if (searchTimer) clearTimeout(searchTimer);
-
-  if (q.length < 2) {
-    showResults([]);
-    return;
-  }
+  if (q.length < 2) return showResults([]);
 
   searchTimer = setTimeout(async () => {
     try {
@@ -478,15 +472,12 @@ async function initBarriosInteraction() {
     }).addTo(map);
 
     updateBarrioLabelVisibility();
-  } catch {
-    // si no existe rpc/layer, simplemente no rompe la app
-  }
+  } catch {}
 }
 
 function updateBarrioLabelVisibility() {
   const z = map.getZoom();
   const shouldShow = barriosInteractionLabelsEnabled && z >= ZOOM_BARRIOS_LABELS;
-
   barrioLabelLayers.forEach((l) => {
     if (!l.getTooltip) return;
     if (shouldShow) l.openTooltip();
@@ -495,7 +486,7 @@ function updateBarrioLabelVisibility() {
 }
 map.on("zoomend", updateBarrioLabelVisibility);
 
-/* ================== Distances by click ================== */
+/* ================== Distances ================== */
 function clearDistances() {
   if (clickMarker) map.removeLayer(clickMarker);
   if (distLinesLayer) map.removeLayer(distLinesLayer);
@@ -510,12 +501,9 @@ async function handleDistanceClick(latlng) {
   const res = await rpcPost("distancias_servicios", { lon: latlng.lng, lat: latlng.lat });
 
   clearDistances();
+
   clickMarker = L.circleMarker(latlng, {
-    radius: 6,
-    fillColor: "#fff",
-    color: "#111827",
-    weight: 2,
-    fillOpacity: 0.9,
+    radius: 6, fillColor: "#fff", color: "#111827", weight: 2, fillOpacity: 0.9,
   }).addTo(map);
 
   const targets = [];
@@ -536,9 +524,7 @@ async function handleDistanceClick(latlng) {
   addTarget("Salud", res.salud_m, res.salud_geom);
 
   distTargetsLayer = L.geoJSON({ type: "FeatureCollection", features: targets }, {
-    pointToLayer: (_f, ll) => L.circleMarker(ll, {
-      radius: 7, fillColor: "#22d3ee", color: "#0b1020", weight: 2, fillOpacity: 0.95
-    }),
+    pointToLayer: (_f, ll) => L.circleMarker(ll, { radius: 7, fillColor: "#22d3ee", color: "#0b1020", weight: 2, fillOpacity: 0.95 }),
     onEachFeature: (f, lyr) => lyr.bindPopup(`<b>${escapeHtml(f.properties.name)}</b><br>${escapeHtml(f.properties.dist_m)} m`)
   }).addTo(map);
 
@@ -552,14 +538,12 @@ async function handleDistanceClick(latlng) {
     <div class="kv"><div class="k">Bomberos (m)</div><div class="v">${escapeHtml(res.bomberos_m)}</div></div>
     <div class="kv"><div class="k">Salud (m)</div><div class="v">${escapeHtml(res.salud_m)}</div></div>
   `;
-
   setFooter("Listo");
 }
 
 distToggle.addEventListener("change", () => {
   clearDistances();
-  if (distToggle.checked) setFooter("Modo distancias activo");
-  else setFooter("Modo distancias desactivado");
+  setFooter(distToggle.checked ? "Modo distancias activo" : "Modo distancias desactivado");
 });
 
 /* ================== Reportes form ================== */
@@ -579,10 +563,7 @@ function clearReportPick() {
 
 btnUbic.addEventListener("click", () => {
   setRepMsg("Solicitando ubicación…");
-  if (!navigator.geolocation) {
-    setRepMsg("Tu navegador no soporta geolocalización.", "err");
-    return;
-  }
+  if (!navigator.geolocation) return setRepMsg("Tu navegador no soporta geolocalización.", "err");
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
@@ -592,11 +573,7 @@ btnUbic.addEventListener("click", () => {
 
       if (reportPickMarker) map.removeLayer(reportPickMarker);
       reportPickMarker = L.circleMarker([latitude, longitude], {
-        radius: 7,
-        fillColor: "#22d3ee",
-        color: "#0b1020",
-        weight: 2,
-        fillOpacity: 0.95,
+        radius: 7, fillColor: "#22d3ee", color: "#0b1020", weight: 2, fillOpacity: 0.95,
       }).addTo(map);
 
       map.setView([latitude, longitude], Math.max(map.getZoom(), 16));
@@ -608,18 +585,15 @@ btnUbic.addEventListener("click", () => {
 
 repPickToggle.addEventListener("change", () => {
   reportPickActive = repPickToggle.checked;
-  btnCancelarPick.style.display = reportPickActive ? "block" : "none";
-
+  btnCancelarPick.style.display = reportPickActive ? "block" : "a;
   if (reportPickActive) {
     setRepMsg("Haz clic en el mapa para fijar Lat/Lon.", "ok");
     distToggle.checked = false;
     clearDistances();
-  } else {
-    setRepMsg("", "");
-  }
+  } else setRepMsg("", "");
 });
 
-btnCancelarPick.addEventListener("click", () => clearReportPick());
+btnCancelarPick.addEventListener("click", clearReportPick);
 
 btnEnviarRep.addEventListener("click", async () => {
   const nombre = repNombre.value.trim();
@@ -634,18 +608,11 @@ btnEnviarRep.addEventListener("click", async () => {
 
   setRepMsg("Enviando…");
   try {
-    // estado queda por default Pendiente en DB
-    await insertReporte({
-      nombre,
-      tipo_requerimiento: tipo,
-      comentarios: comentarios || null,
-      lat,
-      lon,
-    });
+    await insertReporte({ nombre, tipo_requerimiento: tipo, comentarios: comentarios || null, lat, lon });
 
     setRepMsg("✅ Reporte enviado. Actualizando…", "ok");
 
-    // Asegurar capa reportes activa
+    // asegurar capa activa
     const cb = document.querySelector(`input[type="checkbox"][data-table="reportes"]`);
     if (cb && !cb.checked) {
       cb.checked = true;
@@ -654,19 +621,21 @@ btnEnviarRep.addEventListener("click", async () => {
       await refreshLayer("reportes");
     }
 
+    // ✅ actualizar estadísticas
+    await loadReporteStats();
+
     // limpiar
     repComentarios.value = "";
     repTipo.value = "";
     clearReportPick();
 
-    // zoom a reportes
     zoomToLayerIfAny("reportes");
   } catch (e) {
     setRepMsg(`Error: ${e.message}`, "err");
   }
 });
 
-/* Map click handler: report pick OR distances */
+/* Map click: report pick OR distances */
 map.on("click", async (e) => {
   if (reportPickActive) {
     setLatLon(e.latlng.lat, e.latlng.lng);
@@ -674,35 +643,21 @@ map.on("click", async (e) => {
 
     if (reportPickMarker) map.removeLayer(reportPickMarker);
     reportPickMarker = L.circleMarker(e.latlng, {
-      radius: 7,
-      fillColor: "#22d3ee",
-      color: "#0b1020",
-      weight: 2,
-      fillOpacity: 0.95,
+      radius: 7, fillColor: "#22d3ee", color: "#0b1020", weight: 2, fillOpacity: 0.95,
     }).addTo(map);
     return;
   }
-
-  if (distToggle.checked) {
-    await handleDistanceClick(e.latlng);
-  }
+  if (distToggle.checked) await handleDistanceClick(e.latlng);
 });
 
-/* ================== Buttons: Load / Clear ================== */
+/* ================== Load/Clear buttons ================== */
 btnLoadLayers.addEventListener("click", async () => {
-  try {
-    await renderLayerList();
-  } catch (e) {
-    setStatus(`Error: ${e.message}`, "err");
-  }
+  try { await renderLayerList(); } catch (e) { setStatus(`Error: ${e.message}`, "err"); }
 });
 
 btnClear.addEventListener("click", () => {
-  for (const [tabla, layer] of loadedLayers.entries()) {
-    map.removeLayer(layer);
-    loadedLayers.delete(tabla);
-  }
-
+  for (const [_tabla, layer] of loadedLayers.entries()) map.removeLayer(layer);
+  loadedLayers.clear();
   document.querySelectorAll(`input[type="checkbox"][data-table]`).forEach((cb) => (cb.checked = false));
 
   barriosInteractionLabelsEnabled = false;
@@ -727,17 +682,20 @@ btnClear.addEventListener("click", () => {
 (async function init() {
   try {
     setFooter("Inicializando…");
+
     await renderLayerList();
     await initBarriosInteraction();
 
-    // Auto activar reportes (si existe)
+    // ✅ cargar estadísticas al iniciar
+    await loadReporteStats();
+
+    // Auto activar reportes
     const cbReportes = document.querySelector(`input[type="checkbox"][data-table="reportes"]`);
     if (cbReportes) {
       cbReportes.checked = true;
       await addLayer("reportes");
     }
 
-    // Zoom zona trabajo: reportes si hay; si no, barrios
     if (!zoomToLayerIfAny("reportes")) {
       const cbBarrios = document.querySelector(`input[type="checkbox"][data-table="barrios"]`);
       if (cbBarrios) {
