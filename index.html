@@ -19,7 +19,8 @@
         <div class="brand__mark">GP</div>
         <div class="brand__text">
           <div class="brand__title">Geoportal</div>
-          <div class="brand__subtitle">Supabase · PostGIS</div>
+          <!-- ✅ Cambio solicitado -->
+          <div class="brand__subtitle">Supabase · PostGIS -Dsantos</div>
         </div>
         <button class="iconbtn" id="btnToggleSidebar" title="Colapsar panel">
           <span>⟷</span>
@@ -37,6 +38,35 @@
         <div class="panel__header">
           <h2>Enviar reporte</h2>
           <p>Se guarda con estado <span class="pill pill--pending">Pendiente</span> automáticamente.</p>
+        </div>
+
+        <!-- ✅ Mini panel de estadísticas -->
+        <div class="card statsCard">
+          <div class="statsHeader">
+            <div class="statsTitle">Estadísticas de reportes</div>
+            <button class="iconbtn iconbtn--mini" id="btnRefreshStats" title="Actualizar estadísticas">↻</button>
+          </div>
+
+          <div class="statsGrid">
+            <div class="stat stat--pendiente">
+              <div class="stat__k">Pendiente</div>
+              <div class="stat__v" id="statPendiente">—</div>
+            </div>
+            <div class="stat stat--proceso">
+              <div class="stat__k">En proceso</div>
+              <div class="stat__v" id="statProceso">—</div>
+            </div>
+            <div class="stat stat--atendido">
+              <div class="stat__k">Atendido</div>
+              <div class="stat__v" id="statAtendido">—</div>
+            </div>
+            <div class="stat stat--cerrado">
+              <div class="stat__k">Cerrado</div>
+              <div class="stat__v" id="statCerrado">—</div>
+            </div>
+          </div>
+
+          <div class="hint" id="statsHint">Cargando…</div>
         </div>
 
         <div class="card">
