@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Geoportal | Supabase + PostGIS</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand__mark">GP</div>
+        <div class="brand__text">
+          <div class="brand__title">Geoportal</div>
+          <div class="brand__subtitle">Supabase · PostGIS</div>
+        </div>
+        <button class="iconbtn" id="btnToggleSidebar" title="Colapsar panel">
+          <span>⟷</span>
+        </button>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="tabReportes">Reportes</button>
+        <button class="tab" data-tab="tabConsulta">Consulta</button>
+        <button class="tab" data-tab="tabCapas">Capas</button>
+      </div>
+
+      <!-- ============ TAB: Reportes ============ -->
+      <section class="panel active" id="tabReportes">
+        <div class="panel__header">
+          <h2>Enviar reporte</h2>
+          <p>Se guarda con estado <span class="pill pill--pending">Pendiente</span> automáticamente.</p>
+        </div>
+
+        <div class="card">
+          <label class="field">
+            <span>Nombre</span>
+            <input id="repNombre" type="text" placeholder="Tu nombre" />
+          </label>
+
+          <label class="field">
+            <span>Tipo de requerimiento</span>
+            <select id="repTipo">
+              <option value="">Selecciona…</option>
+              <option>Fuga de agua</option>
+              <option>Alcantarillado</option>
+              <option>Seguridad</option>
+              <option>Salud</option>
+              <option>Otro</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Comentarios</span>
+            <textarea id="repComentarios" placeholder="Describe el reporte…"></textarea>
+          </label>
+
+          <div class="grid2">
+            <label class="field">
+              <span>Lat</span>
+              <input id="repLat" type="number" step="any" placeholder="Latitud" />
+            </label>
+            <label class="field">
+              <span>Lon</span>
+              <input id="repLon" type="number" step="any" placeholder="Longitud" />
+            </label>
+          </div>
+
+          <div class="actions">
+            <button class="btn btn--ghost" id="btnUbic">Usar mi ubicación</button>
+            <label class="switch">
+              <input id="repPickToggle" type="checkbox" />
+              <span class="switch__ui"></span>
+              <span class="switch__text">Seleccionar en mapa</span>
+            </label>
+          </div>
+
+          <button class="btn btn--primary" id="btnEnviarRep">Enviar reporte</button>
+          <button class="btn btn--warn" id="btnCancelarPick" style="display:none">Cancelar selección</button>
+
+          <div class="status" id="repMsg"></div>
+
+          <div class="legend">
+            <div class="legend__title">Simbología reportes</div>
+            <div class="legend__row">
+              <span class="repIcon repIcon--pendiente"></span><span>Pendiente</span>
+            </div>
+            <div class="legend__row">
+              <span class="repIcon repIcon--proceso"></span><span>En proceso</span>
+            </div>
+            <div class="legend__row">
+              <span class="repIcon repIcon--atendido"></span><span>Atendido</span>
+            </div>
+            <div class="legend__row">
+              <span class="repIcon repIcon--cerrado"></span><span>Cerrado</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ TAB: Consulta ============ -->
+      <section class="panel" id="tabConsulta">
+        <div class="panel__header">
+          <h2>Consulta</h2>
+          <p>Busca barrios y calcula distancias a servicios.</p>
+        </div>
+
+        <div class="card">
+          <div class="card__title">Buscar barrio</div>
+          <label class="field">
+            <span>Barrio</span>
+            <input id="barrioInput" type="text" placeholder="Escribe un barrio…" autocomplete="off" />
+          </label>
+          <div class="list" id="barrioResults" style="display:none"></div>
+
+          <div class="info" id="barrioInfo" style="display:none"></div>
+        </div>
+
+        <div class="card">
+          <div class="card__title">Distancias por clic</div>
+          <label class="switch">
+            <input id="distToggle" type="checkbox" />
+            <span class="switch__ui"></span>
+            <span class="switch__text">Activar modo distancias</span>
+          </label>
+          <div class="hint">
+            Actívalo y haz clic en el mapa para ver distancias a Policía, Bomberos y Salud.
+          </div>
+
+          <div class="info" id="distInfo" style="display:none"></div>
+        </div>
+      </section>
+
+      <!-- ============ TAB: Capas ============ -->
+      <section class="panel" id="tabCapas">
+        <div class="panel__header">
+          <h2>Capas</h2>
+          <p>Activa / desactiva capas. Reportes se cargan automáticamente.</p>
+        </div>
+
+        <div class="card">
+          <div class="actions">
+            <button class="btn btn--primary" id="btnLoadLayers">Cargar capas</button>
+            <button class="btn btn--ghost" id="btnClear">Limpiar</button>
+          </div>
+
+          <div class="status" id="status"></div>
+          <div class="layers" id="layers"></div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <div class="footer__left">
+          <span class="dot"></span>
+          <span id="footerText">Listo</span>
+        </div>
+        <div class="footer__right">
+          <button class="iconbtn" id="btnHome" title="Zoom a zona de trabajo">⌂</button>
+        </div>
+      </footer>
+    </aside>
+
+    <main class="mapWrap">
+      <div id="map"></div>
+    </main>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- App JS -->
+  <script src="./app.js"></script>
+</body>
+</html>
