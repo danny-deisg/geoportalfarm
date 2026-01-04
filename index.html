@@ -17,11 +17,16 @@
     <aside class="sidebar" id="sidebar">
       <div class="brand">
         <div class="brand__mark">GP</div>
+
         <div class="brand__text">
-          <div class="brand__title">Geoportal</div>
-          <!-- ✅ Cambio solicitado -->
+          <div class="brand__titleRow">
+            <div class="brand__title">Geoportal</div>
+            <div class="brand__tag">Danny-PracticaGeoportal</div>
+          </div>
+
           <div class="brand__subtitle">Supabase · PostGIS -Dsantos</div>
         </div>
+
         <button class="iconbtn" id="btnToggleSidebar" title="Colapsar panel">
           <span>⟷</span>
         </button>
@@ -40,7 +45,7 @@
           <p>Se guarda con estado <span class="pill pill--pending">Pendiente</span> automáticamente.</p>
         </div>
 
-        <!-- ✅ Mini panel de estadísticas -->
+        <!-- Mini panel de estadísticas -->
         <div class="card statsCard">
           <div class="statsHeader">
             <div class="statsTitle">Estadísticas de reportes</div>
@@ -119,18 +124,10 @@
 
           <div class="legend">
             <div class="legend__title">Simbología reportes</div>
-            <div class="legend__row">
-              <span class="repIcon repIcon--pendiente"></span><span>Pendiente</span>
-            </div>
-            <div class="legend__row">
-              <span class="repIcon repIcon--proceso"></span><span>En proceso</span>
-            </div>
-            <div class="legend__row">
-              <span class="repIcon repIcon--atendido"></span><span>Atendido</span>
-            </div>
-            <div class="legend__row">
-              <span class="repIcon repIcon--cerrado"></span><span>Cerrado</span>
-            </div>
+            <div class="legend__row"><span class="repIcon repIcon--pendiente"></span><span>Pendiente</span></div>
+            <div class="legend__row"><span class="repIcon repIcon--proceso"></span><span>En proceso</span></div>
+            <div class="legend__row"><span class="repIcon repIcon--atendido"></span><span>Atendido</span></div>
+            <div class="legend__row"><span class="repIcon repIcon--cerrado"></span><span>Cerrado</span></div>
           </div>
         </div>
       </section>
@@ -149,7 +146,6 @@
             <input id="barrioInput" type="text" placeholder="Escribe un barrio…" autocomplete="off" />
           </label>
           <div class="list" id="barrioResults" style="display:none"></div>
-
           <div class="info" id="barrioInfo" style="display:none"></div>
         </div>
 
@@ -163,7 +159,6 @@
           <div class="hint">
             Actívalo y haz clic en el mapa para ver distancias a Policía, Bomberos y Salud.
           </div>
-
           <div class="info" id="distInfo" style="display:none"></div>
         </div>
       </section>
@@ -172,7 +167,7 @@
       <section class="panel" id="tabCapas">
         <div class="panel__header">
           <h2>Capas</h2>
-          <p>Activa / desactiva capas. Reportes se cargan automáticamente.</p>
+          <p>Activa / desactiva capas. (Inicio: solo barrios)</p>
         </div>
 
         <div class="card">
