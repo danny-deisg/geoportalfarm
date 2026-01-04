@@ -36,7 +36,7 @@ const distInfo = document.getElementById("distInfo");
 const btnLoadLayers = document.getElementById("btnLoadLayers");
 const btnClear = document.getElementById("btnClear");
 
-/* ✅ Stats DOM */
+/* Stats */
 const btnRefreshStats = document.getElementById("btnRefreshStats");
 const statPendiente = document.getElementById("statPendiente");
 const statProceso = document.getElementById("statProceso");
@@ -75,17 +75,20 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "&copy; OpenStreetMap",
 }).addTo(map);
 
-const loadedLayers = new Map();
+const loadedLayers = new Map(); // tableName -> L.GeoJSON
 let barrioHighlight = null;
 
+/* Barrios labels */
 let barriosInteraction = null;
 let barriosInteractionLabelsEnabled = false;
 const barrioLabelLayers = [];
 
+/* Distances */
 let clickMarker = null;
 let distLinesLayer = null;
 let distTargetsLayer = null;
 
+/* Report pick */
 let reportPickMarker = null;
 let reportPickActive = false;
 
@@ -192,7 +195,7 @@ async function loadOpenApiTables() {
   return extractTableNamesFromOpenAPI(spec);
 }
 
-/* ✅ Estadísticas de reportes (client-side, robusto) */
+/* ================== Report Stats (client-side) ================== */
 async function loadReporteStats() {
   statsHint.textContent = "Cargando…";
   statPendiente.textContent = "—";
@@ -201,7 +204,6 @@ async function loadReporteStats() {
   statCerrado.textContent = "—";
 
   try {
-    // traemos solo estado (y hasta 10k filas)
     const r = await fetch(`${SUPABASE_URL}/rest/v1/reportes?select=estado&limit=10000`, {
       headers: {
         apikey: SUPABASE_KEY,
@@ -217,10 +219,7 @@ async function loadReporteStats() {
 
     const rows = await r.json();
     const c = { pendiente: 0, "en proceso": 0, atendido: 0, cerrado: 0 };
-
-    for (const row of rows) {
-      c[normalizeEstado(row.estado)]++;
-    }
+    for (const row of rows) c[normalizeEstado(row.estado)]++;
 
     statPendiente.textContent = c.pendiente;
     statProceso.textContent = c["en proceso"];
@@ -232,7 +231,6 @@ async function loadReporteStats() {
     statsHint.textContent = `No se pudo cargar: ${e.message}`;
   }
 }
-
 btnRefreshStats?.addEventListener("click", loadReporteStats);
 
 /* ================== LAYERS ================== */
@@ -318,7 +316,7 @@ btnToggleSidebar.addEventListener("click", () => {
 });
 
 btnHome.addEventListener("click", async () => {
-  if (!zoomToLayerIfAny("reportes")) zoomToLayerIfAny("barrios");
+  if (!zoomToLayerIfAny("barrios")) zoomToLayerIfAny("reportes");
 });
 
 /* ================== Render layer list ================== */
@@ -418,6 +416,7 @@ async function resaltarBarrio(barrioName) {
 
   if (barrioHighlight) map.removeLayer(barrioHighlight);
   barrioHighlight = L.geoJSON(fc, { style: highlightStyle }).addTo(map);
+
   const b = barrioHighlight.getBounds();
   if (b && b.isValid()) map.fitBounds(b, { padding: [24, 24] });
 }
@@ -478,6 +477,7 @@ async function initBarriosInteraction() {
 function updateBarrioLabelVisibility() {
   const z = map.getZoom();
   const shouldShow = barriosInteractionLabelsEnabled && z >= ZOOM_BARRIOS_LABELS;
+
   barrioLabelLayers.forEach((l) => {
     if (!l.getTooltip) return;
     if (shouldShow) l.openTooltip();
@@ -585,7 +585,8 @@ btnUbic.addEventListener("click", () => {
 
 repPickToggle.addEventListener("change", () => {
   reportPickActive = repPickToggle.checked;
-  btnCancelarPick.style.display = reportPickActive ? "block" : "a;
+  btnCancelarPick.style.display = reportPickActive ? "block" : "none";
+
   if (reportPickActive) {
     setRepMsg("Haz clic en el mapa para fijar Lat/Lon.", "ok");
     distToggle.checked = false;
@@ -609,27 +610,14 @@ btnEnviarRep.addEventListener("click", async () => {
   setRepMsg("Enviando…");
   try {
     await insertReporte({ nombre, tipo_requerimiento: tipo, comentarios: comentarios || null, lat, lon });
+    setRepMsg("✅ Reporte enviado. (Activa la capa reportes si deseas verlo)", "ok");
 
-    setRepMsg("✅ Reporte enviado. Actualizando…", "ok");
-
-    // asegurar capa activa
-    const cb = document.querySelector(`input[type="checkbox"][data-table="reportes"]`);
-    if (cb && !cb.checked) {
-      cb.checked = true;
-      await addLayer("reportes");
-    } else {
-      await refreshLayer("reportes");
-    }
-
-    // ✅ actualizar estadísticas
+    // stats sí se actualizan aunque no cargues reportes
     await loadReporteStats();
 
-    // limpiar
     repComentarios.value = "";
     repTipo.value = "";
     clearReportPick();
-
-    zoomToLayerIfAny("reportes");
   } catch (e) {
     setRepMsg(`Error: ${e.message}`, "err");
   }
@@ -650,7 +638,7 @@ map.on("click", async (e) => {
   if (distToggle.checked) await handleDistanceClick(e.latlng);
 });
 
-/* ================== Load/Clear buttons ================== */
+/* ================== Buttons Load / Clear ================== */
 btnLoadLayers.addEventListener("click", async () => {
   try { await renderLayerList(); } catch (e) { setStatus(`Error: ${e.message}`, "err"); }
 });
@@ -658,6 +646,7 @@ btnLoadLayers.addEventListener("click", async () => {
 btnClear.addEventListener("click", () => {
   for (const [_tabla, layer] of loadedLayers.entries()) map.removeLayer(layer);
   loadedLayers.clear();
+
   document.querySelectorAll(`input[type="checkbox"][data-table]`).forEach((cb) => (cb.checked = false));
 
   barriosInteractionLabelsEnabled = false;
@@ -685,26 +674,19 @@ btnClear.addEventListener("click", () => {
 
     await renderLayerList();
     await initBarriosInteraction();
-
-    // ✅ cargar estadísticas al iniciar
     await loadReporteStats();
 
-    // Auto activar reportes
-    const cbReportes = document.querySelector(`input[type="checkbox"][data-table="reportes"]`);
-    if (cbReportes) {
-      cbReportes.checked = true;
-      await addLayer("reportes");
-    }
+    // ✅ INICIO: activar SOLO barrios
+    document.querySelectorAll(`input[type="checkbox"][data-table]`)
+      .forEach((cb) => (cb.checked = false));
 
-    if (!zoomToLayerIfAny("reportes")) {
-      const cbBarrios = document.querySelector(`input[type="checkbox"][data-table="barrios"]`);
-      if (cbBarrios) {
-        cbBarrios.checked = true;
-        barriosInteractionLabelsEnabled = true;
-        await addLayer("barrios");
-        updateBarrioLabelVisibility();
-        zoomToLayerIfAny("barrios");
-      }
+    const cbBarrios = document.querySelector(`input[type="checkbox"][data-table="barrios"]`);
+    if (cbBarrios) {
+      cbBarrios.checked = true;
+      barriosInteractionLabelsEnabled = true;
+      await addLayer("barrios");
+      updateBarrioLabelVisibility();
+      zoomToLayerIfAny("barrios");
     }
 
     setFooter("Listo");
